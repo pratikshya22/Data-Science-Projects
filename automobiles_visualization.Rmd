@@ -1,0 +1,307 @@
+---
+title: "Automobiles"
+author: "Pratikshya Karki"
+date: "2024-09-05"
+output: pdf_document
+---
+
+
+## Load Libraries
+```{r}
+library(ggplot2)
+library(tidyverse)
+```
+
+
+## Load the dataset
+```{r}
+automobiles <- read.csv("Auto Sales data.csv")
+automobiles
+```
+
+## An overview of the variables used in the dataset
+```{r}
+names(automobiles)
+```
+
+
+
+```{r}
+str(automobiles)
+```
+
+
+
+```{r}
+summary(automobiles)
+```
+
+
+```{r}
+# Using sapply to get the count of unique values for each column
+sapply(automobiles, function(x) length(unique(x)))
+
+```
+
+
+
+```{r}
+# Convert ORDERDATE to date format and clean columns
+automobiles <- automobiles %>%
+  mutate(ORDERDATE = dmy(ORDERDATE),
+         STATUS = as.factor(STATUS),
+         PRODUCTLINE = as.factor(PRODUCTLINE),
+         COUNTRY = as.factor(COUNTRY),
+         DEALSIZE = as.factor(DEALSIZE))
+```
+
+For certain columns, like STATUS, PRODUCTLINE, COUNTRY, and DEALSIZE, using factor is preferable because these columns represent categorical data with a limited number of unique values.
+
+
+## Checking if the columns are cleaned
+```{r}
+str(automobiles)
+```
+
+
+
+```{r}
+#Check for any missing values
+sum(is.na(automobiles))
+```
+
+This dataset has no null or missing values.
+
+
+
+# Performing EDA
+## Univariate Analysis
+### 1.Distribution of Sales
+```{r}
+ggplot(automobiles, aes(x = SALES)) + 
+  geom_histogram(binwidth = 500, fill = 'maroon', color = 'white') +
+  labs(title = "Distribution of Sales", x = "Sales", y = "Count")
+```
+
+Observation: The Sales distribution is right skewed, indicating that most of the orders are of lower value, with fewer high-value orders.
+
+
+
+### 2.Order Status Distribution
+```{r}
+# Plot the order status distribution
+ggplot(automobiles, aes(x = STATUS)) +
+  geom_bar(fill = 'maroon') +
+  labs(title = "Order Status Distribution", x = "Order Status", y = "Count")
+
+```
+
+Observation: We can see most of the orders are shipped.
+
+
+
+
+### 3.Create kernel density plots for a quantitative variable, quantityordered
+```{r}
+ggplot(automobiles, aes(x = QUANTITYORDERED)) +
+  geom_density(fill = "maroon", alpha = 0.8) +
+  labs(title = "Kernel Density Plot of Quantity Ordered", x = "Quantity Ordered", y = "Density")
+
+```
+
+Observation: The above density plot shows the distribution of the quantity of items ordered.
+
+
+
+
+
+
+
+## Bivariate Analaysis
+### 1.RElationship between Sales and Dealsize
+```{r}
+#Boxplot of sales by deal size
+ggplot(automobiles, aes(x = DEALSIZE, y = SALES, fill = DEALSIZE)) +
+  geom_boxplot() +
+  labs(title = "Sales by Deal Size", x = "Deal Size", y = "Sales")
+
+```
+Observation: As expected, larger deal sizes result in higher sales values. There are some outliers in the Large deal size that might be due to some orders in the large deal sizes are expensive.
+
+
+### 2. Relationshhip Between sales and quantity ordered
+```{r}
+# Scatter plot: Quantity Ordered vs. Sales
+ggplot(automobiles, aes(x = QUANTITYORDERED, y = SALES)) +
+  geom_point(color = 'maroon') +
+  labs(title = "Quantity Ordered vs. Sales", x = "Quantity Ordered", y = "Sales")
+```
+
+Observation: The scatter plot indicates a positive correlation between the number of items ordered and total sales. As the quantity ordered increases, the sales also increase.
+Most of the data points are clustered around smaller quantities, which suggests that while bulk orders exist, the majority of the sales come from smaller, more frequent purchases.
+
+### 3. Relationship between Orderdate and Sales
+```{r}
+# Sales trend over time
+ggplot(automobiles, aes(x = ORDERDATE, y = SALES)) +
+  geom_line(stat = 'summary', fun = sum, color = 'maroon') +
+  labs(title = "Sales Trend Over Time", x = "Order Date", y = "Total Sales")
+
+```
+
+Obervations: We can see the fluctuations in sales over time. There are periods with higher sales possibly around holidays or special promotions, especially when at the end of the new year or begining of a  new year.
+
+
+
+### 4.Relationship between sales and productline
+```{r}
+# Boxplot of sales by product line
+ggplot(automobiles, aes(x = PRODUCTLINE, y = SALES, fill = PRODUCTLINE)) +
+  geom_boxplot() +
+  labs(title = "Sales by Product Line", x = "Product Line", y = "Sales") +
+  theme(axis.text.x = element_text(angle = 45, 
+                                   hjust = 1))
+
+```
+
+Observation: We can see the sales of classic cars are seen higher than any other vehicles. 
+
+
+
+### 5. Sales distribution by country
+```{r}
+# Barplot of total sales by country
+ggplot(automobiles, aes(x = reorder(COUNTRY, SALES, sum), y = SALES)) +
+  geom_bar(stat = 'summary', fun = sum, fill = 'maroon') +
+  labs(title = "Total Sales by Country", x = "Country", y = "Total Sales") +
+  coord_flip()
+
+```
+
+Observation: The USA contributes highest sales, followed by countries like Spain,  France, and Australia.
+
+
+
+## Multivariate Analysis
+### 1. Relationship among Sales by productline and dealsize
+```{r}
+# Sales by Product Line and Deal Size
+ggplot(automobiles, aes(x = PRODUCTLINE, y = SALES, fill = DEALSIZE)) +
+  geom_boxplot() +
+  labs(title = "Sales by Product Line and Deal Size", x = "Product Line", y = "Sales") +
+  facet_wrap(~ DEALSIZE) +
+  theme(axis.text.x = element_text(angle = 45, 
+                                   hjust = 1))
+
+```
+
+Observation : For most product lines, larger deal sizes result in significantly higher sales values. The Motorcycles line shows the most consistent pattern, with all deal sizes having relatively high sales values.
+
+
+
+
+
+
+
+# Non- Trivial Research questions with their answers
+
+## Which customers have the longest average time between orders, and what factors contribute to their loyalty?
+```{r}
+# Calculate average time between orders for each customer
+customer_loyalty <- automobiles %>%
+  group_by(CUSTOMERNAME) %>%
+  summarise(avg_days_between_orders = mean(DAYS_SINCE_LASTORDER, na.rm = TRUE)) %>%
+  arrange(desc(avg_days_between_orders))
+
+# Plot average time between orders for top 10 loyal customers
+ggplot(customer_loyalty[1:10, ], aes(x = reorder(CUSTOMERNAME, -avg_days_between_orders), y = avg_days_between_orders)) +
+  geom_bar(stat = "identity", fill = "maroon") +
+  coord_flip() +
+  labs(title = "Top 10 Loyal Customers by Average Days Between Orders", x = "Customer", y = "Average Days Between Orders")
+```
+
+Observation: The customers listed show a high average number of days between their orders, ranging from around 2000 to 2500 days. This suggests that these customers are infrequent but likely consistent buyers, potentially making large or bulk orders over time.
+Also, based on the bar chart, "Collectable Mini Designs Co." is the most loyal customer among the top 10, as it has the shortest average number of days between orders compared to the other customers in the list.
+
+
+
+## How do sales trends vary across different product lines over time? Are there any seasonal patterns or spikes in sales?
+```{r}
+# Calculate monthly sales trends
+monthly_sales <- automobiles %>%
+  group_by(month = floor_date(ORDERDATE, "month"), PRODUCTLINE) %>%
+  summarise(total_sales = sum(SALES, na.rm = TRUE), .groups = "drop")
+
+# Plot sales trends for different product lines
+ggplot(monthly_sales, aes(x = month, y = total_sales, color = PRODUCTLINE)) +
+  geom_line() +
+  labs(title = "Monthly Sales Trends by Product Line", x = "Month", y = "Total Sales", color = "Product Line")
+
+```
+
+Ans: There are significant spikes in sales around early 2019 and mid-2019 across multiple product lines, especially for Classic Cars, where the peaks are very pronounced. This may indicate a cyclical pattern of demand in the market, potentially tied to seasonal promotions or end-of-year sales campaigns.
+
+
+
+## Are there certain products or customer profiles more prone to cancellations?
+```{r}
+# Count the number of cancelled and disputed orders
+order_status <- automobiles %>%
+  filter(STATUS %in% c("Cancelled", "Disputed")) %>%
+  group_by(PRODUCTLINE, STATUS) %>%
+  summarise(count = n(), .groups = "drop")
+
+
+# Plot order cancellations and disputes
+ggplot(order_status, aes(x = PRODUCTLINE, y = count, fill = STATUS)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Order Cancellations and Disputes by Product Line", x = "Product Line", y = "Count", fill = "Status")
+
+```
+
+Ans: The motorcycles are never seen cancelled but a large number if sales is disputed whereas ships are seen more more prone to being cancelled.
+
+
+
+## How does the manufacturer's suggested retail price (MSRP) correlate with actual sales prices across different product lines? Are there any patterns indicating pricing flexibility?
+```{r}
+# Calculate the difference between MSRP and actual sales price
+automobiles$PRICE_DIFFERENCE <- automobiles$MSRP - automobiles$PRICEEACH
+
+# Plot the price difference across different product lines
+ggplot(automobiles, aes(x = PRODUCTLINE, y = PRICE_DIFFERENCE, fill= PRODUCTLINE)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Price Difference (MSRP vs Actual Price) by Product Line", x = "Product Line", y = "Price Difference") +
+  theme(axis.text.x = element_text(angle = 45, 
+                                   hjust = 1))
+```
+
+Ans: Classic Cars show significant pricing flexibility with sales prices above the MSRP, while Vintage Cars seem to be consistently sold at a discount, below their MSRP.
+The other product lines like Motorcycles, Planes, Ships, and Trucks and Buses show stable pricing, with sales aligning closely to the MSRP, suggesting limited flexibility in adjusting prices.
+
+
+
+## What factors influence the size of deals (small, medium, large)? Are larger deals associated with specific product lines, customer locations, or purchasing patterns?
+```{r}
+# Analyze deal sizes
+deal_size_analysis <- automobiles %>%
+  group_by(DEALSIZE, PRODUCTLINE, COUNTRY) %>%
+  summarise(count = n(), .groups = "drop")
+
+
+# Plot deal sizes across different product lines
+ggplot(deal_size_analysis, aes(x = PRODUCTLINE, y = count, fill = DEALSIZE)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~COUNTRY) +
+  labs(title = "Deal Sizes by Product Line and Customer Location", 
+       x = "Product Line", 
+       y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, 
+                                   hjust = 1))
+
+```
+
+Ans: Larger deals are primarily associated with specific product lines, like Classic Cars and Vintage Cars, and tend to occur more frequently in the USA and certain European countries like Germany and Spain. Smaller deals are more prevalent in other countries and product lines like Motorcycles and Planes. Therefore, the customer location, product line, and purchasing patterns heavily influence the size of the deals.
+
+
+
