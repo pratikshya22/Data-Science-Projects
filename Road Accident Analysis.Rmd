@@ -1,0 +1,440 @@
+---
+title: "Final coursework on Accidents dataset"
+author: "Pratikshya Karki"
+output:
+  word_document: default
+  html_notebook: default
+---
+
+# Wrangling
+Task: Load necessary libraries
+```{r}
+library(dplyr)
+library(tidyr)
+```
+
+Task: Load the dataset
+```{r}
+accidents <- read.csv("accidents.csv")
+head(accidents)
+```
+
+```{r}
+guidance <- read.csv("guidance.csv")
+guidance
+```
+
+
+
+Task: View the structure of the dataset
+```{r}
+str(accidents)
+```
+
+Task: View the summary statistics of each column
+```{r}
+summary(accidents)
+```
+
+
+Task: Rename columns for better readability
+```{r}
+colnames(accidents) <- c("Number_of_Vehicles", "Accident_Date", "Time_24hr", "First_Road_Class", 
+                  "Road_Surface", "Lighting_Conditions", "Daylight_Dark", "Weather_Conditions", "Local_Authority", "Type_of_Vehicle", "Casualty_Class", "Casualty_Severity", "Sex_of_Casualty", "Age_of_Casualty")
+head(accidents)
+```
+
+
+
+
+```{r}
+numeric_cols <- select(accidents, contains("Time"))  # Select columns containing "Time"
+character_cols <- select(accidents, contains("Road"))  # Select columns containing "Road"
+
+# Explore data types within these columns
+sapply(numeric_cols, class)  # Check data types of numeric columns
+sapply(character_cols, n_distinct)  # Count distinct values in character columns
+```
+
+Task : Convert 'Accident_Date' to Date format and reformat to 'dd-mm-yyyy'
+```{r}
+library(lubridate)
+accidents <- accidents %>%
+  mutate(Accident_Date = dmy(Accident_Date)) %>%
+  mutate(Accident_Date = format(Accident_Date, "%d-%m-%Y"))
+accidents
+```
+
+Task : Convert 'Time_24hr' to hour minute format
+```{r}
+accidents <- accidents%>%
+ mutate(
+    Time_24hr = sprintf("%04d", Time_24hr), # Ensure all times are in HHMM format
+    Time_24hr = strptime(Time_24hr, format = "%H%M"),
+    Time_24hr = format(Time_24hr, format = "%H:%M")
+  )
+accidents
+```
+
+
+Task: Examine data for any missing values. Give an example of Missing at Random and Not missing at Random data. Explain your answers.
+```{r}
+missing_v <- sapply(accidents, function(x) sum(is.na(x)))
+missing_v
+```
+# Example of Missing at Random (MAR)
+Suppose 'Weather_Conditions' is more likely to be missing if 'Date' is during winter months
+# Example of Not Missing at Random (NMAR)
+Suppose 'Driver_Age' is missing more often when the 'Accident_Severity' is high
+
+
+
+Task : Examine and fix anomalies in “Road Surface” and “1st Road Class“ columns.
+```{r}
+unique(accidents$Road_Surface)
+unique(accidents$First_Road_Class)
+```
+
+For the "Road Surface" column, we standardized values such as "Wet/Damp" and "Wet \xa8 Damp" to "Wet" and consolidated "Frost/Ice" to "Ice". We removed numeric anomalies ('1', '2', '3', '4', '5').
+For the "1st Road Class" column, we standardized road class names to single letters (e.g., "A58" to "A") and removed numeric anomalies ('1', '2', '3', '4', '6').
+
+```{r}
+accidents <- accidents %>%
+  mutate(Road_Surface = recode(Road_Surface, 
+                               'Wet/Damp' = 'Wet', 
+                               'Wet \xa8 Damp'='Wet', 
+                               'Frost/Ice'='Ice', 
+                               'Dry/Dusty' = 'Dry',
+                               '2'=NA_character_,
+                               '1'=NA_character_,
+                               '3'=NA_character_,
+                               '4'=NA_character_,
+                               '5'=NA_character_))
+        
+accidents <- accidents %>%
+  mutate(First_Road_Class = recode(First_Road_Class,
+                                  'A58' = 'A', 
+                                  'A646' = 'A', 
+                                  'B6138'='B',    
+                                  'A629'='A', 
+                                  'A641'='A', 
+                                  'A672'='A', 
+                                  'A6033'='A', 
+                                  'A6139'='A', 
+                                  'A644'='A', 
+                                  'A62'='A', 
+                                  'B6114'='B', 
+                                  'A6319'='A', 
+                                  'B6112'='B', 
+                                  'M62'='M',  
+                                  'A681'='A', 
+                                  'B6113'='B', 
+                                  'A629(M)'='A',  
+                                  'A643'='A',
+                                  'A6036'='A',
+                                  'A6025'='A',
+                                  'A647'='A',
+                                  'A6026(M)'='A',
+                                  'A649'='A',
+                                  'A6026'='A',
+                                  '3'=NA_character_,
+                                  '6'=NA_character_,
+                                  '1'=NA_character_,
+                                  '4'=NA_character_,
+                                  '2'=NA_character_))
+
+unique(accidents$Road_Surface)
+unique(accidents$First_Road_Class)
+accidents
+```
+
+
+# Delete unnecessary Columns or Rows
+```{r}
+# Identify columns with non-changing values or duplication
+constant_columns <- sapply(accidents, function(x) length(unique(x)) == 1)
+accidents <- accidents %>% select(-which(constant_columns))
+accidents
+
+```
+Reason: Columns with constant values do not contribute to analysis
+
+
+
+# Examine 'Age of Casualty' for outliers
+# Method 1: Boxplot
+```{r}
+
+boxplot_outliers <- boxplot.stats(accidents$Age_of_Casualty)$out
+boxplot_outliers
+length(boxplot_outliers)
+```
+
+```{r}
+boxplot(accidents$Age_of_Casualty)
+```
+
+# Method 2:  3 Sigma Rule
+```{r}
+#First calculate standard deviation and mean
+sd_value <- sd(accidents$Age_of_Casualty, na.rm = TRUE)
+mean_value <- mean(accidents$Age_of_Casualty, na.rm = TRUE)
+
+
+#calculate upper and lower bound
+upper_bound_sigma <- mean_value + 3*sd_value
+lower_bound_sigma <- mean_value - 3*sd_value
+
+# extract outliers
+outliers_sigma <- accidents %>% filter((Age_of_Casualty > upper_bound_sigma) | (Age_of_Casualty < lower_bound_sigma))
+
+#count the number of outliers
+nrow(outliers_sigma)
+```
+
+
+# Method 3: Hampel Identifier
+```{r}
+#First calculate Median and MAD
+median_value <- median(accidents$Age_of_Casualty, na.rm = TRUE)
+MAD_value <- mad(accidents$Age_of_Casualty, na.rm = TRUE)
+
+#calculate upper and lower bound
+upper_bound <- median_value + 3*MAD_value
+lower_bound <- median_value - 3*MAD_value
+
+# extract outliers
+outliers_hampel <- accidents %>% filter((Age_of_Casualty > upper_bound) | (Age_of_Casualty < lower_bound))
+
+#count the number of outliers
+nrow(outliers_hampel)
+```
+
+
+
+```{r}
+# Compare the outputs
+outliers_summary <- data.frame(
+  Method = c("Boxplot", "3-Sigma", "Hampel"),
+  Outlier_Count = c(length(boxplot_outliers), nrow(outliers_sigma), nrow(outliers_hampel))
+)
+
+outliers_summary
+```
+Justification: 
+Given that the Hampel Identifier and Boxplot methods identified the same number of outliers (7), it is important to consider the robustness of these methods.
+The Hampel Identifier is the best method for identifying outliers in the "Age of Casualty" data.This recommendation is based on its robustness to skewed distributions and extreme outliers, which are common in real-world data. The Hampel Identifier provides a reliable approach for outlier detection by focusing on the median and MAD, reducing the influence of extreme values.
+
+
+# Save the clean dataset
+```{r}
+write.csv(accidents, "clean_accident.csv", row.names = FALSE)
+```
+
+
+```{r}
+read.csv("clean_accident.csv")
+```
+
+
+
+# Exploration
+# Weather Condition and Gender-based Accidents
+Determine if there is any weather condition where male drivers have more accidents than female drivers.
+```{r}
+# Group by 'Weather.Conditions' and 'Sex.of.Casualty' and count accidents
+accidents_by_weather_sex <- accidents %>%
+  group_by(Weather_Conditions, Sex_of_Casualty) %>%
+  summarise(Accident_Count = n(), .groups = 'drop')
+
+# Compare male and female accidents for each weather condition
+male_female_comparison <- accidents_by_weather_sex %>%
+  pivot_wider(names_from = Sex_of_Casualty, values_from = Accident_Count, values_fill = list(Accident_Count = 0)) %>%
+  mutate(Difference = `1` - `2`) %>%
+  filter(Difference > 0)
+
+male_female_comparison
+
+male_female_comparison %>%
+  mutate(
+    Message = paste("Male drivers have", Difference, "more accidents than female drivers when weather is", Weather_Conditions)
+  ) %>%
+  select(Message)
+
+
+```
+
+
+# Casualty Trends Over Time
+Analyze the number of casualties over time and determine the year with the highest number of casualties.
+```{r}
+# Extract year from Accident.Date
+accidents <- accidents %>%
+  mutate(Year = year(dmy(Accident_Date)))
+
+# Group by Year and count number of casualties
+casualties_by_year <- accidents %>%
+  group_by(Year) %>%
+  summarise(Number_of_Casualties = n())
+
+# Determine the trend over time and identify the year with the highest number of casualties
+casualties_trend <- casualties_by_year %>%
+  arrange(Year)
+
+# Identify the year with the highest number of casualties
+year_with_max_casualties <- casualties_trend %>%
+  filter(Number_of_Casualties == max(Number_of_Casualties))
+
+# Print the results
+casualties_trend
+year_with_max_casualties
+
+```
+Is the number of casualties increased or decreased over time? Which year has the
+highest number of casualties?
+Ans: The number of casualties seem to be decreased  over time. And, the year 2014 has the highest number of casualties of 623.
+
+
+# Plot: Light Conditions and Severity
+Create a plot to explain the relationship between light conditions and severity.
+```{r}
+library(ggplot2)
+
+# Group by 'Lighting_Conditions' and 'Casualty_Severity' and count
+severity_by_light <- accidents %>%
+  group_by(Lighting_Conditions, Casualty_Severity) %>%
+  summarise(Count = n(), .groups = 'drop')
+
+# Plot the relationship
+ggplot(severity_by_light, aes(x = factor(Lighting_Conditions), y = Count, fill = factor(Casualty_Severity))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Casualty Severity by Lighting Conditions",
+       x = "Lighting Conditions",
+       y = "Number of Casualties",
+       fill = "Casualty Severity")
+
+
+```
+
+
+# Plot: Weather Condition and Number of Vehicles Involved
+Create a plot to explain the relationship between weather conditions and the number of vehicles involved.
+```{r}
+
+# Group by 'Weather.Conditions' and 'Number.of.Vehicles' and count
+vehicles_by_weather <- accidents %>%
+  group_by(Weather_Conditions, Number_of_Vehicles) %>%
+  summarise(Count = n(), .groups = 'drop')
+
+# Plot the relationship
+ggplot(vehicles_by_weather, aes(x = factor(Weather_Conditions), y = Number_of_Vehicles, size = Count)) +
+  geom_point() +
+  labs(title = "Number of Vehicles Involved by Weather Conditions",
+       x = "Weather Conditions",
+       y = "Number of Vehicles Involved",
+       size = "Count")
+
+
+
+#boxplot
+weather_vehicles_plot <- ggplot(accidents, aes(x = factor(Weather_Conditions), y = Number_of_Vehicles)) +
+  geom_boxplot() +
+  labs(
+    title = "Distribution of Number of Vehicles Involved under Different Weather Conditions",
+    x = "Weather Conditions",
+    y = "Number of Vehicles Involved"
+  ) +
+  theme_minimal()
+weather_vehicles_plot
+
+```
+
+
+
+# Insights from the Plots
+Light Conditions and Severity: The bar plot shows the distribution of casualty severity across different lighting conditions. It helps to identify if certain light conditions (e.g., daylight, dark) are associated with higher or lower severity of casualties.
+
+Weather Condition and Number of Vehicles Involved: The scatter plot with bubble sizes indicates the number of vehicles involved in accidents under different weather conditions. Larger bubbles suggest more accidents involving multiple vehicles in specific weather conditions.
+
+
+
+
+# Regression
+```{r}
+ library(caret)
+```
+
+
+Task: Select “Casualty Class”,“Casualty Severity” and “Type of Vehicle”, “Weather condition” columns and remove rows with missing values in those columns
+```{r}
+accidents_clean <- accidents %>%
+  select(Casualty_Class, Casualty_Severity, Type_of_Vehicle, Weather_Conditions, Age_of_Casualty) %>%
+  filter(complete.cases(Casualty_Class, Casualty_Severity, Type_of_Vehicle, Weather_Conditions))
+accidents_clean
+```
+
+
+
+Task : Separate data into training (complete cases) and prediction (missing "Age of Casualty")
+
+```{r}
+# Training data: rows where Age_of_Casualty is not NA
+train_data <- accidents_clean %>%
+  filter(!is.na(Age_of_Casualty))
+
+# Prediction data: rows where Age_of_Casualty is NA
+prediction_data <- accidents_clean %>%
+  filter(is.na(Age_of_Casualty))
+```
+
+Task: Train the regression model
+```{r}
+# Define the model formula
+model_formula <- Age_of_Casualty ~ Casualty_Class + Casualty_Severity + Type_of_Vehicle + Weather_Conditions
+
+# Train the linear regression model
+set.seed(123)  # Set seed for reproducibility
+lm_model <- train(model_formula, data = train_data, method = "lm")
+
+# Print the model summary
+summary(lm_model)
+```
+
+
+Task: Predict missing values in the "Age of Casualty" column
+```{r}
+# Use the trained model to predict the missing Age_of_Casualty values
+predicted_ages <- predict(lm_model, newdata = prediction_data)
+
+# Replace the missing values with the predicted values
+prediction_data$Age_of_Casualty <- predicted_ages
+```
+
+Task: Replace the missing values in the dataset with the predicted values
+```{r}
+ #Combine the data back into the main dataset
+imputed_data <- bind_rows(train_data,prediction_data)
+```
+
+Task: Save the imputed data to "regression.csv"
+```{r}
+write.csv(imputed_data, "regression.csv", row.names = FALSE)
+```
+
+
+```{r}
+read.csv("regression.csv")
+```
+
+
+Problems Encountered: 
+During the imputation process, missing values in the attributes used for training the model must be handled properly. Rows with missing values in these attributes were filtered out before training the model.
+
+
+Solution: 
+Ensuring the data used for training does not contain missing values, and predicting only for rows with missing Age of Casualty but complete values for the other attributes helped in accurate imputation.
+
+
+
+
+
