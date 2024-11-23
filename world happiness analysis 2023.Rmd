@@ -1,0 +1,742 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+#install.packages("Metrics")
+#install.packages("caret")
+#install.packages("readx")
+#install.packages("reshape2")
+#install.packages("ggpubr")
+#install.packages("stringr")
+#install.packages("skimr")
+#install.packages("e1071")
+#install.packages("pROC")
+library(Metrics)
+library(caret)
+library(readr)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(skimr)
+library(tidyr)
+library(reshape2)
+library(ggpubr)
+library(stringr)
+library(e1071)
+library(pROC)
+```
+
+
+
+```{r}
+happy15_df = read.csv ("2015.csv")
+happy16_df = read.csv ("2016.csv")
+happy17_df = read.csv ("2017.csv")
+happy18_df = read.csv ("2018.csv")
+happy19_df = read.csv ("2019.csv")
+head(happy19_df)
+head(happy18_df)
+head(happy17_df)
+head(happy16_df)
+head(happy15_df)
+```
+
+
+#Change year 2018 datasets column names base year 2017 datasets
+```{r}
+happy18_df=plyr::rename(happy18_df, replace = c( "Country.or.region"="Country", 
+                                  "Overall.rank"="Happiness.Rank" ,
+                                  "GDP.per.capita"="Economy..GDP.per.Capita.",
+                                  "Healthy.life.expectancy"="Health..Life.Expectancy.",
+                                  "Freedom.to.make.life.choices"="Freedom",
+                                  "Perceptions.of.corruption"="Trust..Government.Corruption.",
+                                  "Social.support"="Family",
+                                  "Score"="Happiness.Score"))
+colnames(happy18_df)
+```
+
+
+#Change year 2019 datasets column names base year 2017 datasets
+```{r}
+happy19_df=plyr::rename(happy19_df, replace = c( "Country.or.region"="Country", 
+                                  "Overall.rank"="Happiness.Rank" ,
+                                  "GDP.per.capita"="Economy..GDP.per.Capita.",
+                                  "Healthy.life.expectancy"="Health..Life.Expectancy.",
+                                  "Freedom.to.make.life.choices"="Freedom",
+                                  "Perceptions.of.corruption"="Trust..Government.Corruption.",
+                                  "Social.support"="Family",
+                                  "Score"="Happiness.Score"))
+colnames(happy19_df)
+```
+
+
+#Insert year column at first position (index 0)
+```{r}
+happy15_df<-cbind(Year=2015,happy15_df)
+
+happy16_df<-cbind(Year=2016,happy16_df)
+
+happy17_df<-cbind(Year=2017,happy17_df)
+
+happy18_df<-cbind(Year=2018,happy18_df)
+
+happy19_df<-cbind(Year=2019,happy19_df)
+head(happy19_df)
+head(happy18_df)
+head(happy17_df)
+head(happy16_df)
+head(happy15_df)
+```
+
+
+
+
+#Change column type for emerging dataset
+```{r}
+happy18_df$Trust..Government.Corruption. = as.numeric(happy18_df$Trust..Government.Corruption.)
+
+str(happy18_df)
+
+```
+
+
+
+#Merge data from 2015-2019
+```{r}
+happy15_16<-dplyr::bind_rows(happy15_df,happy16_df)
+
+happy15_16_17<-dplyr::bind_rows(happy15_16,happy17_df)
+
+happy18_19<-dplyr::bind_rows(happy18_df,happy19_df)
+
+df<-dplyr::bind_rows(happy18_19,happy15_16_17)
+
+head(df)
+```
+
+
+
+
+#Change Happiness.Rank data type
+```{r}
+df$Happiness.Rank  = as.numeric(df$Happiness.Rank )
+
+str(df)
+```
+
+
+
+
+
+#Remove unnescessary columns
+```{r}
+#Count NA value in every column
+colSums(is.na(df))
+```
+
+
+#Now remove the unnecessary columns
+```{r}
+df = subset(df, select = -c(Lower.Confidence.Interval,Upper.Confidence.Interval,Dystopia.Residual,Standard.Error,Whisker.high,Whisker.low))
+
+colSums(is.na(df))
+```
+
+
+
+```{r}
+df$Trust..Government.Corruption.[is.na(df$Trust..Government.Corruption.)] <- median(df$Trust..Government.Corruption., na.rm = T)
+colSums(is.na(df))
+```
+
+
+```{r}
+aggregate(df$Country, by=list(df$Year), FUN=length)
+```
+
+
+```{r}
+Country_2015 = subset(df, Year == 2015)$Country
+Country_2016 = subset(df, Year == 2016)$Country
+Country_2017 = subset(df, Year == 2017)$Country
+Country_2018 = subset(df, Year == 2018)$Country
+Country_2019 = subset(df, Year == 2019)$Country
+```
+
+
+
+
+```{r}
+common_country =intersect(intersect(intersect(intersect(Country_2015,
+Country_2016),Country_2017),Country_2018),Country_2019)
+length(common_country)
+```
+
+```{r}
+df1 = subset(df,Country %in% common_country)
+print(paste("The amount of rows in the dataset is: ",dim(df1)[1]))
+print(paste("The amount of columns in the dataset is: ",dim(df1)[2]))
+```
+
+
+
+```{r}
+common_region <- unique(subset(df1, Region!="NA", c(Country, Region)))
+
+head(common_country)
+common_region
+```
+
+
+
+
+```{r}
+assign_region <- function(x){
+  Region <- common_region$Region[common_region$Country == x]
+}
+
+for(country in common_country)
+      df1$Region[df1$Country == country] <- assign_region(country)
+```
+
+
+
+```{r}
+colSums(is.na(df1))
+```
+
+
+
+```{r}
+skimr::skim_without_charts(df1)
+```
+
+```{r}
+str(df1)
+```
+
+
+```{r}
+df1 %>%
+  filter(Year == 2015) %>%
+  arrange(-Happiness.Score) %>%
+  slice_head(n=10) %>%
+  ggplot(aes(reorder(Country, Happiness.Score), Happiness.Score)) +
+  geom_point(colour = "red", size = 3) +
+  theme(text=element_text(size=10)) + 
+  coord_flip() +
+  labs(title = "The 10 happiest countries in 2015", x = "")
+```
+
+
+```{r}
+# Filter data for the year 2015
+df_top_10 <- df1 %>%
+  filter(Year == 2015) %>%
+  arrange(desc(Happiness.Score)) %>%
+  slice_head(n = 10)
+
+# Plotting
+ggplot(df_top_10, aes(reorder(Country, Happiness.Score), Happiness.Score, size = Happiness.Score)) +
+  geom_point(colour = "red") +
+  theme(text = element_text(size = 10)) + 
+  coord_flip() +
+  labs(title = "The 10 happiest countries in 2015", x = "") +
+  scale_size_continuous(range = c(3, 10))
+```
+
+
+
+```{r}
+df1 %>%
+  filter(Year == 2016) %>%
+  arrange(-Happiness.Score) %>%
+  slice_head(n=10) %>%
+  ggplot(aes(reorder(Country, Happiness.Score), Happiness.Score)) +
+  geom_point(colour = "red", size = 3) +
+  theme(text=element_text(size=10)) + 
+  coord_flip() +
+  labs(title = "The 10 happiest countries in 2016", x = "")
+```
+
+
+
+
+```{r}
+# Filter data for the year 2015
+df_top_10 <- df1 %>%
+  filter(Year == 2016) %>%
+  arrange(desc(Happiness.Score)) %>%
+  slice_head(n = 10)
+
+# Plotting
+ggplot(df_top_10, aes(reorder(Country, Happiness.Score), Happiness.Score, size = Happiness.Score)) +
+  geom_point(colour = "red") +
+  theme(text = element_text(size = 10)) + 
+  coord_flip() +
+  labs(title = "The 10 happiest countries in 2016", x = "") +
+  scale_size_continuous(range = c(3, 10))
+```
+
+
+
+```{r}
+df1 %>%
+  filter(Year == 2017) %>%
+  arrange(-Happiness.Score) %>%
+  slice_head(n=10) %>%
+  ggplot(aes(reorder(Country, Happiness.Score), Happiness.Score)) +
+  geom_point(colour = "red", size = 3) +
+  theme(text=element_text(size=10)) + 
+  coord_flip() +
+  labs(title = "The 10 happiest countries in 2017", x = "")
+```
+
+
+```{r}
+# Filter data for the year 2015
+df_top_10 <- df1 %>%
+  filter(Year == 2017) %>%
+  arrange(desc(Happiness.Score)) %>%
+  slice_head(n = 10)
+
+# Plotting
+ggplot(df_top_10, aes(reorder(Country, Happiness.Score), Happiness.Score, size = Happiness.Score)) +
+  geom_point(colour = "red") +
+  theme(text = element_text(size = 10)) + 
+  coord_flip() +
+  labs(title = "The 10 happiest countries in 2017", x = "") +
+  scale_size_continuous(range = c(3, 10))
+```
+
+
+
+```{r}
+df1 %>%
+  filter(Year == 2018) %>%
+  arrange(-Happiness.Score) %>%
+  slice_head(n=10) %>%
+  ggplot(aes(reorder(Country, Happiness.Score), Happiness.Score)) +
+  geom_point(colour = "red", size = 3) +
+  theme(text=element_text(size=10)) + 
+  coord_flip() +
+  labs(title = "The 10 happiest countries in 2018", x = "")
+```
+
+
+```{r}
+# Filter data for the year 2015
+df_top_10 <- df1 %>%
+  filter(Year == 2018) %>%
+  arrange(desc(Happiness.Score)) %>%
+  slice_head(n = 10)
+
+# Plotting
+ggplot(df_top_10, aes(reorder(Country, Happiness.Score), Happiness.Score, size = Happiness.Score)) +
+  geom_point(colour = "red") +
+  theme(text = element_text(size = 10)) + 
+  coord_flip() +
+  labs(title = "The 10 happiest countries in 2018", x = "") +
+  scale_size_continuous(range = c(3, 10))
+```
+
+
+
+
+```{r}
+df1 %>%
+  filter(Year == 2019) %>%
+  arrange(-Happiness.Score) %>%
+  slice_head(n=10) %>%
+  ggplot(aes(reorder(Country, Happiness.Score), Happiness.Score)) +
+  geom_point(colour = "red", size = 3) +
+  theme(text=element_text(size=10)) + 
+  coord_flip() +
+  labs(title = "The 10 happiest countries in 2019", x = "")
+```
+
+
+
+```{r}
+# Filter data for the year 2015
+df_top_10 <- df1 %>%
+  filter(Year == 2019) %>%
+  arrange(desc(Happiness.Score)) %>%
+  slice_head(n = 10)
+
+# Plotting
+ggplot(df_top_10, aes(reorder(Country, Happiness.Score), Happiness.Score, size = Happiness.Score)) +
+  geom_point(colour = "red") +
+  theme(text = element_text(size = 10)) + 
+  coord_flip() +
+  labs(title = "The 10 happiest countries in 2019", x = "") +
+  scale_size_continuous(range = c(3, 10))
+```
+
+
+
+```{r}
+# Group by Country and Year, calculate the mean happiness variables
+Top10_Happiest <- df1 %>%
+  select(Country, Year, Happiness.Score) %>%
+  group_by(Country, Year) %>%
+  summarise(Average_Happiness = mean(Happiness.Score, na.rm = TRUE)) %>%
+  ungroup() %>%
+  arrange(desc(Average_Happiness)) %>%
+  group_by(Year) %>%
+  slice_head(n = 10)
+
+# Create a bar plot showing the top 10 happiest countries for each year
+ggplot(Top10_Happiest, aes(x = reorder(Country, Average_Happiness), y = Average_Happiness, fill = Year)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Top 10 Happiest Countries for Different Years",
+       x = "Country",
+       y = "Average Happiness Score",
+       fill = "Year") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+
+```{r}
+Happiness.Continent <- df1 %>%
+                          select(-c(Year,Happiness.Score,Happiness.Rank))%>%
+                          group_by(Region) %>%
+                          summarise_at(vars(-Country), funs(mean(., na.rm=TRUE)))
+
+
+Happiness.Continent.melt <- melt(Happiness.Continent)
+
+
+# Faceting
+ggplot(Happiness.Continent.melt, aes(y=value, x=Region, color=Region, fill=Region)) + 
+  geom_bar( stat="identity") +    
+  facet_wrap(~variable) + theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Average value of happiness variables for different regions", 
+       y = "Average value") 
+
+```
+
+
+
+
+
+```{r}
+df1 %>%
+  group_by(Country) %>%
+  summarise(mscore = mean(Happiness.Score)) %>%
+  arrange(-mscore) %>%
+  slice_head(n=10) %>%
+  
+  ggplot(aes(reorder(Country, mscore), mscore)) +
+  geom_point() +
+  theme_bw() +
+  
+  coord_flip() +
+  labs(title = "Happiness Score by Country",
+       x = "", y = "Average happiness score")
+```
+
+
+
+```{r}
+df1 %>%
+  group_by(Country) %>%
+  summarise(mscore = mean(Happiness.Score, na.rm = TRUE)) %>%
+  arrange(desc(mscore)) %>%
+  slice_head(n = 10) %>%
+  ggplot(aes(reorder(Country, mscore), mscore)) +
+  geom_point(colour = "red") +
+  theme_bw() +
+  coord_flip() +
+  labs(title = "Happiness Score by Country",
+       x = "", y = "Average happiness score")
+```
+
+
+
+```{r}
+df1 %>%
+  mutate(y = as.character(Year)) %>%
+  select(y, Country, Region, Happiness.Score) %>%
+  pivot_wider(names_from = y, values_from = Happiness.Score, names_prefix = "y_") %>%
+  mutate(p = (y_2019 - y_2015) / y_2015 * 100) %>%
+  arrange(desc(p)) %>%
+  slice_head(n = 10) %>%
+  ggplot(aes(reorder(Country, p), p)) +
+  geom_point(colour = "red") +
+  theme_bw() +
+  coord_flip() +
+  labs(title = "The 10 most progressive countries from 2015 - 2019",
+       y = "Percentage Increase of Happiness Score", x = "")
+```
+
+
+
+```{r}
+df1 %>%
+  group_by(Country) %>%
+  summarise(gdp = mean(Economy..GDP.per.Capita.),
+            family = mean(Family),
+            life.expectancy = mean(Health..Life.Expectancy.),
+            freedom = mean(Freedom),
+            generosity = mean(Generosity),
+            corruption = mean(Trust..Government.Corruption.)) %>%
+  pivot_longer(c(gdp, family, life.expectancy, freedom, generosity, corruption),
+               names_to = "factor", values_to = "value") %>%
+  ggplot(aes(reorder(factor, value), value)) +
+  geom_bar(stat = "identity", fill = "darkgreen", width = 0.55, alpha = 0.7) +
+  geom_text(aes(label = paste0(round(value, 2)), vjust = -0.5)) +
+  theme_bw() +
+  labs(title = "The mean value of factors by country", y = "", x = "")
+
+```
+
+
+
+```{r}
+df1 %>%
+  group_by(Region) %>%
+  summarise(gdp = mean(Economy..GDP.per.Capita.),
+            family = mean(Family),
+            life.expectancy = mean(Health..Life.Expectancy.),
+            freedom = mean(Freedom),
+            generosity = mean(Generosity),
+            corruption = mean(Trust..Government.Corruption.)) %>%
+  pivot_longer(c(gdp, family, life.expectancy, freedom, generosity, corruption),
+               names_to = "factor", values_to = "value") %>%
+  ggplot(aes(reorder(factor, value), value)) +
+  geom_bar(stat = "identity", fill = "darkgreen", width = 0.55, alpha = 0.7) +
+  geom_text(aes(label = paste0(round(value, 2)), vjust = -0.5)) +
+  theme_bw() +
+  labs(title = "The mean value of factors by region", y = "", x = "")
+
+```
+
+
+```{r}
+df1 %>%
+  summarise(gdp = mean(Economy..GDP.per.Capita.),
+            family = mean(Family),
+            life.expectancy = mean(Health..Life.Expectancy.),
+            freedom = mean(Freedom),
+            generosity = mean(Generosity),
+            corruption = mean(Trust..Government.Corruption.)) %>%
+  pivot_longer(c(gdp, family, life.expectancy,freedom,generosity, corruption),
+               names_to = "f", values_to = "value") %>%
+  ggplot(aes(reorder(f, value), value)) +
+  geom_bar(stat = "identity", fill = "red", width = 0.55, alpha = 0.7) +
+  geom_text(aes(label = paste0(round(value, 2)), vjust = -0.5)) +
+  theme_bw() +
+  labs(title = "The mean value of the factors" , y = "", x = "")
+```
+
+
+
+
+
+#Find correlation using heatmap
+# Drop Year,Country,Happiness.Rank,Region column before computing the heatmap.
+```{r}
+dataset = select(df1,-c("Year","Country","Happiness.Rank","Region"))
+head(dataset)
+```
+
+
+```{r}
+#install.packages("GGally")
+library(GGally)
+
+ggcorr(dataset, label = TRUE, label_round = 2, label_size = 3.5, size = 2, hjust = .85) +
+  ggtitle("Correlation Heatmap") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+
+#Regression models
+# Split into train set (80%) and test set (20%)
+```{r}
+set.seed(123) 
+split=0.80
+trainIndex <- createDataPartition(dataset$Happiness.Score, p=split, list=FALSE) 
+data_train <- dataset[ trainIndex,] 
+data_test <- dataset[-trainIndex,]
+```
+
+
+
+
+#Train Multiple Linear Regression model with data_train
+```{r}
+# Fitting Multiple Linear Regression to the Training set
+lm_model = lm(formula = Happiness.Score ~ .,
+               data = data_train)
+
+summary(lm_model)
+```
+
+
+# Predict happiness score with data_test
+```{r}
+y_pred_lm = predict(lm_model, newdata = data_test)
+Actual_lm = data_test$Happiness.Score
+
+Pred_Actual_lm <- as.data.frame(cbind(Prediction = y_pred_lm, Actual = Actual_lm))
+
+
+gg.lm <- ggplot(Pred_Actual_lm, aes(Actual, Prediction )) +
+  geom_point() + theme_bw() + geom_abline() +
+  labs(title = "Multiple Linear Regression", x = "Actual happiness score",
+       y = "Predicted happiness score") +
+  theme(plot.title = element_text(family = "Helvetica", face = "bold", size = (15)), 
+        axis.title = element_text(family = "Helvetica", size = (10)))
+gg.lm
+```
+```{r}
+data.frame(
+  R2 = R2(y_pred_lm, data_test$Happiness.Score),
+  RMSE = RMSE(y_pred_lm, data_test$Happiness.Score),
+  MAE = MAE(y_pred_lm, data_test$Happiness.Score)
+)
+```
+
+
+
+
+
+
+#Train Random Forest Regression model with data_train
+```{r}
+
+#install.packages("randomForest")
+library(randomForest)
+
+x_train_rf<-select(dataset,-c("Happiness.Score"))
+
+          
+set.seed(1234)
+regressor_rf = randomForest(x = x_train_rf,
+                         y = dataset$Happiness.Score,
+                         ntree = 500)
+```
+
+
+
+
+#Predict happiness score with data_test
+```{r}
+# Predicting happiness score with Random Forest Regression
+y_pred_rf = predict(regressor_rf, newdata = data_test)
+
+Pred_Actual_rf <- as.data.frame(cbind(Prediction = y_pred_rf, Actual = data_test$Happiness.Score))
+
+
+gg.rf <- ggplot(Pred_Actual_rf, aes(Actual, Prediction )) +
+  geom_point() + theme_bw() + geom_abline() +
+  labs(title = "Random Forest Regression", x = "Actual happiness score",
+       y = "Predicted happiness score") +
+  theme(plot.title = element_text(family = "Helvetica", face = "bold", size = (15)), 
+        axis.title = element_text(family = "Helvetica", size = (10)))
+gg.rf
+```
+
+
+```{r}
+# Predicting happiness score with Random Forest Regression
+y_pred_rf = predict(regressor_rf, newdata = data_test)
+
+# Creating a data frame with predictions and actual values
+Pred_Actual_rf <- as.data.frame(cbind(Prediction = y_pred_rf, Actual = data_test$Happiness.Score))
+
+# Plotting the predictions vs actual values
+gg.rf <- ggplot(Pred_Actual_rf, aes(Actual, Prediction)) +
+  geom_point(colour = "red") +  # Set points color to red
+  geom_abline(colour = "red") + # Set line color to red
+  theme_bw() +
+  labs(title = "Random Forest Regression", x = "Actual happiness score", y = "Predicted happiness score") +
+  theme(plot.title = element_text(family = "Helvetica", face = "bold", size = 15), 
+        axis.title = element_text(family = "Helvetica", size = 10))
+
+# Display the plot
+gg.rf
+```
+
+
+
+```{r}
+data.frame(
+  R2 = R2(y_pred_rf, data_test$Happiness.Score),
+  RMSE = RMSE(y_pred_rf, data_test$Happiness.Score),
+  MAE = MAE(y_pred_rf, data_test$Happiness.Score)
+)
+```
+
+
+
+
+
+
+#Model Evaluation
+```{r}
+ggarrange(gg.lm,gg.rf, ncol = 2, nrow = 2)
+```
+
+
+
+```{r}
+tc <- trainControl(method = "repeatedcv", 
+                   number=10,#10-fold cross validation 
+                   classProbs = TRUE,
+                   savePredictions = TRUE, 
+                   repeats = 3,
+                   ## Estimate class probabilities
+                   summaryFunction = multiClassSummary,)
+```
+
+
+```{r}
+set.seed(123)
+model_knn <- train(
+  Happy.Level~., 
+  data=data_train, 
+  trControl=tc,
+  preProcess = c("center","scale"),
+  method="knn",
+  metric='Accuracy',
+  tuneLength=20
+  ) 
+
+model_knn
+```
+
+
+
+```{r}
+pred_knn <- predict(model_knn, data_test)
+
+cm_knn<-confusionMatrix(pred_knn, data_test$Happy.Level)
+
+cm_knn
+```
+
+
+
+```{r}
+knn_importance <- varImp(model_knn)
+
+# Create box plot of importance of variables
+ggplot(data = knn_importance, mapping = aes(x = knn_importance[, 1])) + 
+  geom_boxplot(fill = "red", color = "red") + # Create box plot with red color
+  labs(title = "Variable importance: K-Nearest Neighbours") + # Title
+  theme_light() # Theme
+```
+
